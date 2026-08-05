@@ -1,0 +1,64 @@
+"use client"
+import { twistResultStore } from "@/lib/store"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+
+export const useFilmAnalysis = () => {
+    const router = useRouter()
+    const [fieldValue,setFieldValue] = useState<string>('')
+    const [fieldError,setFieldError] = useState<string>('')
+    const setResult = twistResultStore((state) => state.setResult)
+    const addToHistory = twistResultStore((state) => state.addToHistory)
+    const history = twistResultStore((state) => state.history)
+    const loading = twistResultStore((state) => state.loading)
+    const setLoading = twistResultStore((state) => state.setLoading)
+
+    const fetchDetails = async (searchHistory = false,filmInput = '') => {
+    if(searchHistory) {
+      const res = history[filmInput]
+      setResult(res)
+      router.push('/results')
+      return
+    }
+    setResult('')
+    if(!fieldValue.trim().length){
+      setFieldError("Field value is mandatory")
+      return
+    }
+    
+    setLoading(true)
+    router.push('/results')
+    try {
+        const res = await fetch("/api/analyze" ,{
+          method : 'POST',
+          headers : {
+            'Content-Type' : 'application/json'
+          },
+          body : JSON.stringify({"filmInput" : fieldValue.trim() })
+        })
+        const data = await res.json()
+        setResult(data.message)
+        addToHistory(fieldValue.trim(),data.message)
+    }
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setFieldError(errorMessage)
+    }
+    finally {
+              setLoading(false)
+    }     
+  }
+
+  const updateFieldValue = (value : string) => {
+    setFieldError('')
+    setFieldValue(value)
+  }
+
+    return {
+        fieldValue,
+        fieldError,
+        loading,
+        fetchDetails,
+        updateFieldValue,
+    }
+}
