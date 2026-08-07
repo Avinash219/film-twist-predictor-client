@@ -1,7 +1,7 @@
 "use client"
 import { twistResultStore } from "@/lib/store"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 export const useFilmAnalysis = () => {
     const router = useRouter()
@@ -12,6 +12,7 @@ export const useFilmAnalysis = () => {
     const history = twistResultStore((state) => state.history)
     const loading = twistResultStore((state) => state.loading)
     const setLoading = twistResultStore((state) => state.setLoading)
+    const abortControllerRef = useRef<AbortController | null>(null)
 
     const fetchDetails = async (searchHistory = false,filmInput = '') => {
     if(searchHistory) {
@@ -27,6 +28,8 @@ export const useFilmAnalysis = () => {
     }
     
     setLoading(true)
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = new AbortController()
     router.push('/results')
     try {
         const res = await fetch("/api/analyze" ,{
@@ -34,13 +37,18 @@ export const useFilmAnalysis = () => {
           headers : {
             'Content-Type' : 'application/json'
           },
-          body : JSON.stringify({"filmInput" : fieldValue.trim() })
+          body : JSON.stringify({"filmInput" : fieldValue.trim() }),
+          signal : abortControllerRef.current.signal
         })
         const data = await res.json()
         setResult(data.message)
         addToHistory(fieldValue.trim(),data.message)
     }
     catch (error) {
+      if(error instanceof DOMException && error.name === "AbortError"){
+        console.log("Request Cancelled")
+        return
+      }
       const errorMessage = error instanceof Error ? error.message : String(error)
       setFieldError(errorMessage)
     }
