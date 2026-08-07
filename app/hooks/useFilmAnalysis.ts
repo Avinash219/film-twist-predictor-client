@@ -1,5 +1,6 @@
 "use client"
 import { twistResultStore } from "@/lib/store"
+import { useMutation } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
 
@@ -13,6 +14,42 @@ export const useFilmAnalysis = () => {
     const loading = twistResultStore((state) => state.loading)
     const setLoading = twistResultStore((state) => state.setLoading)
     const abortControllerRef = useRef<AbortController | null>(null)
+    
+    const fetchResult = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch("/api/analyze" ,{
+          method : 'POST',
+          headers : {
+            'Content-Type' : 'application/json'
+          },
+          body : JSON.stringify({"filmInput" : fieldValue.trim() }),
+          signal : abortControllerRef.current?.signal
+        })
+        const data = await res.json()
+        setResult(data.message)
+        addToHistory(fieldValue.trim(),data.message)
+        
+    }
+    catch (error) {
+      if(error instanceof DOMException && error.name === "AbortError"){
+        console.log("Request Cancelled")
+        return
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setFieldError(errorMessage)
+    }
+    finally {
+      setLoading(false)
+    }
+    }
+
+     const {mutate} = useMutation({
+      mutationFn : fetchResult,
+      onSuccess : () => {
+        
+      }
+    })
 
     const fetchDetails = async (searchHistory = false,filmInput = '') => {
     if(searchHistory) {
@@ -26,35 +63,10 @@ export const useFilmAnalysis = () => {
       setFieldError("Field value is mandatory")
       return
     }
-    
-    setLoading(true)
     abortControllerRef.current?.abort()
     abortControllerRef.current = new AbortController()
     router.push('/results')
-    try {
-        const res = await fetch("/api/analyze" ,{
-          method : 'POST',
-          headers : {
-            'Content-Type' : 'application/json'
-          },
-          body : JSON.stringify({"filmInput" : fieldValue.trim() }),
-          signal : abortControllerRef.current.signal
-        })
-        const data = await res.json()
-        setResult(data.message)
-        addToHistory(fieldValue.trim(),data.message)
-    }
-    catch (error) {
-      if(error instanceof DOMException && error.name === "AbortError"){
-        console.log("Request Cancelled")
-        return
-      }
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      setFieldError(errorMessage)
-    }
-    finally {
-              setLoading(false)
-    }     
+    mutate()
   }
 
   const updateFieldValue = (value : string) => {
