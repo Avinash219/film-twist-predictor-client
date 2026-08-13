@@ -14,36 +14,37 @@ export const useFilmAnalysis = () => {
     const loading = twistResultStore((state) => state.loading)
     const setLoading = twistResultStore((state) => state.setLoading)
     const abortControllerRef = useRef<AbortController | null>(null)
+    const appendResult = twistResultStore((state) => state.appendResult)
     
-    const fetchResult = async () => {
-      setLoading(true)
-      try {
-        const res = await fetch("/api/analyze" ,{
-          method : 'POST',
-          headers : {
-            'Content-Type' : 'application/json'
-          },
-          body : JSON.stringify({"filmInput" : fieldValue.trim() }),
-          signal : abortControllerRef.current?.signal
+const fetchResult = async () => {
+    try {
+        const res = await fetch("/api/analyze", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({"filmInput": fieldValue.trim()}),
+            signal: abortControllerRef.current?.signal
         })
-        const data = await res.json()
-        setResult(data.message)
-        addToHistory(fieldValue.trim(),data.message)
-        
-    }
-    catch (error) {
-      if(error instanceof DOMException && error.name === "AbortError"){
-        console.log("Request Cancelled")
-        return
-      }
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      setFieldError(errorMessage)
-    }
-    finally {
-      setLoading(false)
-    }
-    }
 
+        const reader = res.body?.getReader()
+        const decoder = new TextDecoder()
+
+        while(reader) {
+            const { done, value } = await reader.read()
+            if(done) break
+            const chunk = decoder.decode(value)
+            appendResult(chunk)
+        }
+        
+        addToHistory(fieldValue.trim(), twistResultStore.getState().result)
+        
+    } catch(error) {
+        if(error instanceof DOMException && error.name === "AbortError") return
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        setFieldError(errorMessage)
+    } finally {
+        setLoading(false)
+    }
+}
      const {mutate} = useMutation({
       mutationFn : fetchResult,
       onSuccess : () => {
